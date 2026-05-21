@@ -4,10 +4,12 @@ export interface User {
   email?: string
   reputation: number
   is_lone_soldier: boolean
+  is_admin?: boolean
   aliyah_year: number | null
   country_of_origin: string | null
   avatar_url: string | null
   bio?: string | null
+  is_verified?: boolean
   created_at: string
   updated_at?: string
 }

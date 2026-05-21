@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -10,6 +10,7 @@ from app.models.answer import Answer
 from app.models.vote import Vote
 from app.schemas.answer import AnswerCreate, AnswerRead, AnswerUpdate
 from app.auth.security import get_current_user, get_current_user_optional
+from app.services.email import send_answer_notification
 
 router = APIRouter(prefix="/api/questions/{question_id}/answers", tags=["answers"])
 
@@ -40,16 +41,31 @@ async def list_answers(
 async def create_answer(
     question_id: int,
     data: AnswerCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = (await db.execute(select(Question).where(Question.id == question_id))).scalar_one_or_none()
+    q = (await db.execute(
+        select(Question).options(selectinload(Question.author)).where(Question.id == question_id)
+    )).scalar_one_or_none()
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
     answer = Answer(body=data.body, author_id=current_user.id, question_id=question_id)
     db.add(answer)
     q.answer_count += 1
     await db.commit()
+
+    # Notify question author — skip if they answered their own question
+    if q.author_id != current_user.id:
+        background_tasks.add_task(
+            send_answer_notification,
+            q.author.email,
+            q.author.display_name,
+            q.title,
+            q.id,
+            current_user.display_name,
+        )
+
     result = await db.execute(select(Answer).options(*_A_OPTS).where(Answer.id == answer.id))
     return _to_answer_read(result.scalar_one(), current_user.id)
 

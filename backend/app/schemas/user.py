@@ -26,6 +26,7 @@ class UserPublic(BaseModel):
     display_name: str
     reputation: int
     is_lone_soldier: bool
+    is_admin: bool
     aliyah_year: int | None
     country_of_origin: str | None
     avatar_url: str | None

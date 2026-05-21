@@ -142,7 +142,7 @@ export default function QuestionPage() {
                     onVote={(v) => aVoteMut.mutate({ aid: a.id, v })}
                     disabled={!user || user.id === a.author.id}
                   />
-                  {a.is_accepted && <CheckCircle className="h-6 w-6 text-green-500 mt-1" title="Accepted answer" />}
+                  {a.is_accepted && <span title="Accepted answer"><CheckCircle className="h-6 w-6 text-green-500 mt-1" /></span>}
                   {!a.is_accepted && user?.id === question.author.id && (
                     <button
                       onClick={() => acceptMut.mutate(a.id)}

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Search, LogOut, User, PlusCircle } from 'lucide-react'
+import { Search, LogOut, User, PlusCircle, Shield } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Navbar() {
@@ -42,6 +42,12 @@ export default function Navbar() {
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           {user ? (
             <>
+              {user.is_admin && (
+                <Link to="/admin" className="btn-ghost flex items-center gap-1 text-brand-600">
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs font-semibold">Admin</span>
+                </Link>
+              )}
               <Link to="/ask" className="btn-primary hidden sm:inline-flex">
                 <PlusCircle className="h-4 w-4" />
                 Ask

@@ -18,7 +18,7 @@ export default function UserCard({ user, label, date }: Props) {
         <Link to={`/users/${user.id}`} className="flex items-center gap-1 text-brand-600 font-medium hover:underline">
           {user.display_name}
           {user.is_lone_soldier && (
-            <Shield className="h-3 w-3 text-amber-500 inline" title="Lone Soldier" />
+            <span title="Lone Soldier"><Shield className="h-3 w-3 text-amber-500 inline" /></span>
           )}
         </Link>
         <span className="text-gray-400">{user.reputation} rep</span>

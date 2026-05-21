@@ -1,24 +1,30 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.database import engine, Base
 from app.models import *  # noqa: F401,F403 — registers all models with Base
-from app.routers import auth, questions, answers, comments, tags, users
+from app.routers import auth, questions, answers, comments, tags, users, admin
 from app.services.redis_client import close_redis
 from app.config import settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Safely add is_admin column when upgrading existing deployments
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
     await _seed_tags()
+    await _promote_admin()
     yield
     await close_redis()
 
 
 async def _seed_tags():
-    """Seed common olim/lone-soldier tags on first run."""
     from sqlalchemy import select
     from app.database import AsyncSessionLocal
     from app.models.question import Tag
@@ -45,11 +51,27 @@ async def _seed_tags():
         await session.commit()
 
 
+async def _promote_admin():
+    """Promote ADMIN_EMAIL to admin on startup if they exist and aren't already."""
+    if not settings.admin_email:
+        return
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.email == settings.admin_email))
+        user = result.scalar_one_or_none()
+        if user and not user.is_admin:
+            user.is_admin = True
+            await session.commit()
+
+
 app = FastAPI(title="Olim & Lone Soldiers QA", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.cors_origins],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +83,7 @@ app.include_router(answers.router)
 app.include_router(comments.router)
 app.include_router(tags.router)
 app.include_router(users.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

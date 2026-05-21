@@ -17,3 +17,9 @@ export const getMe = () => api.get<User>('/api/auth/me').then((r) => r.data)
 
 export const updateMe = (data: Partial<User>) =>
   api.put<User>('/api/users/me', data).then((r) => r.data)
+
+export const confirmEmail = (token: string) =>
+  api.post<User>(`/api/auth/confirm-email?token=${token}`).then((r) => r.data)
+
+export const resendConfirmation = () =>
+  api.post('/api/auth/resend-confirmation').then((r) => r.data)

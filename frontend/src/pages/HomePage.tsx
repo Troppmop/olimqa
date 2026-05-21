@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
-import { useState } from 'react'
 import { fetchQuestions } from '../api/questions'
 import QuestionCard from '../components/QuestionCard'
 import Sidebar from '../components/Sidebar'

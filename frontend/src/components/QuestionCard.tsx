@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { MessageSquare, Eye, CheckCircle } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
 import type { Question } from '../types'
 import TagBadge from './TagBadge'
 import UserCard from './UserCard'

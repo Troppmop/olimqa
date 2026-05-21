@@ -18,6 +18,7 @@ class User(Base):
     reputation: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     aliyah_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     country_of_origin: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_lone_soldier: Mapped[bool] = mapped_column(Boolean, default=False)
