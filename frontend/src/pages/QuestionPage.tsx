@@ -4,7 +4,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { formatDistanceToNow } from 'date-fns'
-import { CheckCircle, Pencil, Trash2, CheckCheck } from 'lucide-react'
+import { CheckCircle, Pencil, Trash2, CheckCheck, Sparkles } from 'lucide-react'
 import {
   fetchQuestion, fetchAnswers, createAnswer, voteQuestion, voteAnswer, acceptAnswer,
   deleteQuestion, deleteAnswer,
@@ -158,7 +158,12 @@ export default function QuestionPage() {
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{a.body}</ReactMarkdown>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {a.is_ai_generated && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full px-2 py-0.5">
+                          <Sparkles className="h-3 w-3" /> AI-assisted
+                        </span>
+                      )}
                       {user?.id === a.author.id && (
                         <button onClick={() => { if (confirm('Delete this answer?')) delAMut.mutate(a.id) }} className="btn-ghost text-xs text-red-500">
                           <Trash2 className="h-3.5 w-3.5" /> Delete

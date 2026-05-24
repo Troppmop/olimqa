@@ -1,5 +1,8 @@
+import asyncio
+import os
+import tempfile
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
@@ -10,6 +13,8 @@ from app.models.user import User
 from app.models.question import Question
 from app.models.answer import Answer
 from app.auth.security import require_admin
+from app.config import settings
+from app.schemas.answer import AnswerRead
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -246,3 +251,146 @@ async def admin_delete_answer(
         q.answer_count -= 1
     await db.delete(a)
     await db.commit()
+
+
+# ── AI Answer Generation ──────────────────────────────────────────
+
+class AIGenerateResponse(BaseModel):
+    generated_text: str
+    citations: list[dict] = []
+
+
+class AIPublishRequest(BaseModel):
+    body: str
+
+
+class AIFileResponse(BaseModel):
+    name: str
+    status: str
+
+
+@router.post("/questions/{question_id}/generate-ai-answer",
+             response_model=AIGenerateResponse)
+async def generate_ai_answer(
+    question_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Generate (but do not save) a Pinecone-grounded AI answer for a question."""
+    if not settings.pinecone_api_key:
+        raise HTTPException(status_code=503, detail="PINECONE_API_KEY is not configured")
+
+    q = (await db.execute(
+        select(Question).where(Question.id == question_id)
+    )).scalar_one_or_none()
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    from app.services.pinecone_client import get_assistant
+
+    assistant = await get_assistant()
+    prompt = f"**Question:** {q.title}\n\n{q.body}"
+
+    try:
+        response = await asyncio.to_thread(
+            assistant.chat,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Pinecone Assistant error: {exc}")
+
+    text = response.message.content
+    citations = []
+    for ref in (response.citations or []):
+        try:
+            citations.append({
+                "file": ref.file.name,
+                "pages": [p.page_number for p in (ref.pages or [])],
+            })
+        except Exception:
+            pass
+
+    return AIGenerateResponse(generated_text=text, citations=citations)
+
+
+@router.post("/questions/{question_id}/publish-ai-answer",
+             response_model=AnswerRead, status_code=201)
+async def publish_ai_answer(
+    question_id: int,
+    data: AIPublishRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Save the admin-reviewed AI answer to the database under the OlimAI bot user."""
+    from app.config import AI_BOT_EMAIL
+
+    q = (await db.execute(
+        select(Question).where(Question.id == question_id)
+    )).scalar_one_or_none()
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    bot = (await db.execute(
+        select(User).where(User.email == AI_BOT_EMAIL)
+    )).scalar_one_or_none()
+    if not bot:
+        raise HTTPException(status_code=500, detail="OlimAI bot user not found — check startup logs")
+
+    answer = Answer(
+        body=data.body,
+        author_id=bot.id,
+        question_id=question_id,
+        is_ai_generated=True,
+    )
+    db.add(answer)
+    q.answer_count += 1
+    await db.commit()
+
+    result = await db.execute(
+        select(Answer)
+        .options(selectinload(Answer.author), selectinload(Answer.votes))
+        .where(Answer.id == answer.id)
+    )
+    a = result.scalar_one()
+    return AnswerRead.model_validate(a).model_copy(update={"user_vote": None})
+
+
+@router.post("/ai/upload-document", response_model=AIFileResponse)
+async def upload_ai_document(
+    file: UploadFile = File(...),
+    _: User = Depends(require_admin),
+):
+    """Upload a document (PDF/TXT/MD/DOCX) to the Pinecone Assistant for grounding."""
+    if not settings.pinecone_api_key:
+        raise HTTPException(status_code=503, detail="PINECONE_API_KEY is not configured")
+
+    allowed = {".pdf", ".txt", ".md", ".docx"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(allowed))}",
+        )
+
+    from app.services.pinecone_client import get_assistant
+
+    contents = await file.read()
+    assistant = await get_assistant()
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    try:
+        uploaded = await asyncio.to_thread(
+            assistant.upload_file,
+            file_path=tmp_path,
+            timeout=None,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Pinecone upload failed: {exc}")
+    finally:
+        os.unlink(tmp_path)
+
+    uploaded_name = getattr(uploaded, "name", None) or file.filename or "unknown"
+    return AIFileResponse(name=uploaded_name, status="uploaded")

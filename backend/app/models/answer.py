@@ -15,6 +15,7 @@ class Answer(Base):
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
     vote_score: Mapped[int] = mapped_column(Integer, default=0)
     is_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

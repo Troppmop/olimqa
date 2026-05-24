@@ -36,9 +36,17 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False  # True for port 587 (STARTTLS) — used by Resend/SendGrid
     frontend_url: str = "http://localhost:5173"
 
+    # Pinecone Assistant
+    pinecone_api_key: str = ""
+    pinecone_assistant_name: str = "olim-assistant"
+    pinecone_region: str = "us"  # "us" or "eu"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 settings = Settings()
+
+# Module-level constant — used by main.py and admin.py to avoid circular imports
+AI_BOT_EMAIL = "ai@olimqa.internal"

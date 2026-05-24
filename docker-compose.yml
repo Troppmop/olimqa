@@ -48,6 +48,9 @@ services:
       SMTP_PORT: 1025
       SMTP_FROM: noreply@olimqa.local
       FRONTEND_URL: http://localhost:5173
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_ASSISTANT_NAME: ${PINECONE_ASSISTANT_NAME:-olim-assistant}
+      PINECONE_REGION: ${PINECONE_REGION:-us}
     depends_on:
       db:
         condition: service_healthy

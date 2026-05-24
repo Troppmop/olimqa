@@ -45,6 +45,7 @@ export interface Answer {
   question_id: number
   vote_score: number
   is_accepted: boolean
+  is_ai_generated: boolean
   created_at: string
   updated_at: string
   user_vote: number | null

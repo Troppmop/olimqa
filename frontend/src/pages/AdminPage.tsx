@@ -1,19 +1,22 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import {
   Users, MessageSquare, BarChart3, Trash2, Shield, ShieldOff,
   ShieldCheck, Ban, CheckCircle, ChevronLeft, ChevronRight, Search,
+  Sparkles, FileUp, FileText,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchAdminStats, fetchAdminUsers, fetchAdminQuestions, fetchAdminAnswers,
   updateAdminUser, deleteAdminUser, deleteAdminQuestion, deleteAdminAnswer,
+  uploadAIDocument,
   type AdminUser, type AdminQuestion, type AdminAnswer,
 } from '../api/admin'
+import AIAnswerModal from '../components/AIAnswerModal'
 
-type Tab = 'overview' | 'users' | 'questions' | 'answers'
+type Tab = 'overview' | 'users' | 'questions' | 'answers' | 'ai-docs'
 
 function StatCard({ label, value, sub, icon }: { label: string; value: number; sub?: string; icon: React.ReactNode }) {
   return (
@@ -54,6 +57,10 @@ export default function AdminPage() {
   const [userPage, setUserPage] = useState(1)
   const [qPage, setQPage] = useState(1)
   const [aPage, setAPage] = useState(1)
+  const [aiQuestion, setAiQuestion] = useState<AdminQuestion | null>(null)
+  const [uploadedDocs, setUploadedDocs] = useState<{ name: string; status: string }[]>([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user?.is_admin) { navigate('/'); return null }
 
@@ -98,11 +105,27 @@ export default function AdminPage() {
     },
   })
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await uploadAIDocument(file)
+      setUploadedDocs(prev => [...prev, result])
+    } catch {
+      setUploadedDocs(prev => [...prev, { name: file.name, status: 'failed' }])
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 className="h-4 w-4" /> },
     { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'questions', label: 'Questions', icon: <MessageSquare className="h-4 w-4" /> },
     { id: 'answers', label: 'Answers', icon: <MessageSquare className="h-4 w-4" /> },
+    { id: 'ai-docs', label: 'AI Documents', icon: <Sparkles className="h-4 w-4" /> },
   ]
 
   return (
@@ -259,12 +282,22 @@ export default function AdminPage() {
                     <td className="px-4 py-3 text-center">{q.answer_count}</td>
                     <td className="px-4 py-3 text-center">{q.view_count}</td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => confirm('Delete this question and all its answers?') && rmQuestion.mutate(q.id)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setAiQuestion(q)}
+                          className="p-1.5 rounded hover:bg-purple-50 text-purple-400 hover:text-purple-600"
+                          title="Generate AI Answer"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => confirm('Delete this question and all its answers?') && rmQuestion.mutate(q.id)}
+                          className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
+                          title="Delete question"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -319,6 +352,68 @@ export default function AdminPage() {
           </div>
           <Pagination page={aPage} total={answers?.total ?? 0} perPage={20} onChange={setAPage} />
         </div>
+      )}
+
+      {/* ── AI Documents ── */}
+      {tab === 'ai-docs' && (
+        <div className="max-w-2xl space-y-6">
+          <div className="card p-6">
+            <h2 className="text-base font-semibold text-gray-800 mb-1 flex items-center gap-2">
+              <FileUp className="h-4 w-4 text-purple-500" /> Upload Grounding Document
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Upload IDF rulebooks, Israeli aliyah law PDFs, or any official document.
+              The Pinecone Assistant will use these as its knowledge base when generating answers.
+              Supported: PDF, TXT, MD, DOCX.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.txt,.md,.docx"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="btn-primary flex items-center gap-2"
+            >
+              <FileUp className="h-4 w-4" />
+              {uploading ? 'Uploading…' : 'Choose File to Upload'}
+            </button>
+          </div>
+
+          {uploadedDocs.length > 0 && (
+            <div className="card p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Documents uploaded this session
+              </h3>
+              <ul className="space-y-2">
+                {uploadedDocs.map((doc, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="text-gray-700 flex-1">{doc.name}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      doc.status === 'uploaded'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-600'
+                    }`}>
+                      {doc.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Answer generation modal */}
+      {aiQuestion && (
+        <AIAnswerModal
+          question={aiQuestion}
+          onClose={() => setAiQuestion(null)}
+        />
       )}
     </div>
   )

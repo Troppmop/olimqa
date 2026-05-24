@@ -4,6 +4,9 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Allow large document uploads (300-page PDFs can exceed 50 MB)
+    client_max_body_size 100m;
+
     # Use a variable so nginx resolves the upstream per-request (not at startup).
     # This prevents "host not found" crashes when the backend hasn't started yet.
     resolver RESOLVER_PLACEHOLDER valid=30s ipv6=off;

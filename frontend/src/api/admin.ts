@@ -1,4 +1,5 @@
 import api from './client'
+import type { Answer } from '../types'
 
 export interface AdminStats {
   total_users: number
@@ -69,3 +70,23 @@ export const fetchAdminAnswers = (page = 1) =>
 
 export const deleteAdminAnswer = (id: number) =>
   api.delete(`/api/admin/answers/${id}`)
+
+// ── AI Answer Generation ──────────────────────────────────────────
+
+export interface AICitation { file: string; pages: number[] }
+
+export const generateAIAnswer = (qid: number) =>
+  api.post<{ generated_text: string; citations: AICitation[] }>(
+    `/api/admin/questions/${qid}/generate-ai-answer`
+  ).then(r => r.data)
+
+export const publishAIAnswer = (qid: number, body: string) =>
+  api.post<Answer>(`/api/admin/questions/${qid}/publish-ai-answer`, { body }).then(r => r.data)
+
+export const uploadAIDocument = (file: File) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post<{ name: string; status: string }>('/api/admin/ai/upload-document', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data)
+}

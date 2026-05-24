@@ -7,21 +7,27 @@ from app.database import engine, Base
 from app.models import *  # noqa: F401,F403 — registers all models with Base
 from app.routers import auth, questions, answers, comments, tags, users, admin
 from app.services.redis_client import close_redis
-from app.config import settings
+from app.services.pinecone_client import close_pinecone
+from app.config import settings, AI_BOT_EMAIL
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Safely add is_admin column when upgrading existing deployments
         await conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"
         ))
+        await conn.execute(text(
+            "ALTER TABLE answers ADD COLUMN IF NOT EXISTS "
+            "is_ai_generated BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
     await _seed_tags()
     await _promote_admin()
+    await _seed_ai_bot()
     yield
     await close_redis()
+    await close_pinecone()
 
 
 async def _seed_tags():
@@ -52,7 +58,6 @@ async def _seed_tags():
 
 
 async def _promote_admin():
-    """Promote ADMIN_EMAIL to admin on startup if they exist and aren't already."""
     if not settings.admin_email:
         return
     from sqlalchemy import select
@@ -64,6 +69,28 @@ async def _promote_admin():
         user = result.scalar_one_or_none()
         if user and not user.is_admin:
             user.is_admin = True
+            await session.commit()
+
+
+async def _seed_ai_bot():
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+    from app.auth.security import hash_password
+
+    async with AsyncSessionLocal() as session:
+        existing = (await session.execute(
+            select(User).where(User.email == AI_BOT_EMAIL)
+        )).scalar_one_or_none()
+        if not existing:
+            session.add(User(
+                email=AI_BOT_EMAIL,
+                hashed_password=hash_password("!bot-no-login!"),
+                display_name="OlimAI",
+                is_active=True,
+                is_verified=True,
+                is_admin=False,
+            ))
             await session.commit()
 
 

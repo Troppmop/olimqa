@@ -20,6 +20,7 @@ class AnswerRead(BaseModel):
     question_id: int
     vote_score: int
     is_accepted: bool
+    is_ai_generated: bool = False
     created_at: datetime
     updated_at: datetime
     user_vote: int | None = None
